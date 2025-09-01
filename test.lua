@@ -32,9 +32,6 @@ local deathConnection = nil
 local respawnV2Thread = nil
 local shouldRespawnV2 = false
 
--- Переменная для оптимизации уведомлений
-local lastNotificationTime = 0
-
 -- Создаем таблицу для хранения всех кнопок и их параметров
 local buttonConfigs = {
     FARM = {
@@ -141,54 +138,15 @@ local buttonConfigs = {
 -- Получаем сервисы один раз
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local RemoteEvent = ReplicatedStorage.RemoteEvent
 local player = Players.LocalPlayer
 
--- Оптимизированная функция уведомлений
-local function optimizedNotify(title, content)
-    local currentTime = time()
-    if currentTime - lastNotificationTime >= 1 then
-        Rayfield:Notify({
-            Title = title,
-            Content = content,
-            Duration = 2,
-            Image = 4483362458,
-        })
-        lastNotificationTime = currentTime
-    end
-end
-
--- Функция очистки памяти
+-- Функция очистки памяти (простая версия)
 local function cleanupMemory()
     collectgarbage("collect")
-    task.wait(0.5)
+    task.wait(0.1)
     collectgarbage("collect")
-    print("🔄 Очистка памяти выполнена")
 end
-
--- Автоматическая очистка памяти каждые 30 минут
-task.spawn(function()
-    while true do
-        task.wait(1800)
-        cleanupMemory()
-    end
-end)
-
--- Мониторинг памяти
-local function monitorMemory()
-    task.spawn(function()
-        while true do
-            task.wait(300)
-            local memory = collectgarbage("count")
-            if memory > 50000 then
-                cleanupMemory()
-            end
-        end
-    end)
-end
-
-monitorMemory()
 
 -- Функции для ESP
 local function createESP(character)
@@ -236,16 +194,11 @@ local function removeESP(character)
 end
 
 local function updateESP()
-    local players = Players:GetPlayers()
-    local count = 0
-    
-    for _, player in ipairs(players) do
+    for _, player in ipairs(Players:GetPlayers()) do
         if player ~= Players.LocalPlayer and player.Character then
             if not espObjects[player.Character] then
                 createESP(player.Character)
             end
-            count += 1
-            if count > 20 then break end
         end
     end
     
@@ -262,7 +215,7 @@ local function startESP()
     espLoop = task.spawn(function()
         while espEnabled do
             updateESP()
-            task.wait(2) -- Реже обновляем ESP
+            task.wait(1)
         end
     end)
 end
@@ -288,10 +241,12 @@ local function stopAllFarming()
             farmingThreads[buttonName] = nil
         end
     end
-    stopRespawnV2()
-    stopESP()
-    cleanupMemory()
-    optimizedNotify("Фарм остановлен", "Все процессы остановлены + очистка памяти")
+    Rayfield:Notify({
+        Title = "Фарм остановлен",
+        Content = "Все процессы фарма остановлены",
+        Duration = 3,
+        Image = 4483362458,
+    })
 end
 
 -- Функция для остановки RespawnV2
@@ -309,7 +264,7 @@ local function respawnPlayer()
     RemoteEvent:FireServer({"Respawn"})
 end
 
--- Оптимизированная функция быстрого респавна
+-- Функция для быстрого респавна
 local function startFastRespawn()
     stopRespawnV2()
     
@@ -319,41 +274,39 @@ local function startFastRespawn()
     respawnV2Thread = task.spawn(function()
         while shouldRespawnV2 do
             respawnPlayer()
-            
-            local startTime = time()
-            while shouldRespawnV2 and time() - startTime < 10 do
-                RunService.Heartbeat:Wait()
-            end
+            task.wait(10) -- 10 секунд
         end
     end)
 end
 
--- Оптимизированная функция запуска фарма
+-- Функция для запуска фарма
 local function startFarming(buttonName, eventName)
     if farmingThreads[buttonName] then
         task.cancel(farmingThreads[buttonName])
         farmingThreads[buttonName] = nil
-        optimizedNotify("Фарм остановлен", buttonName .. " остановлен")
+        Rayfield:Notify({
+            Title = "Фарм остановлен",
+            Content = buttonName .. " остановлен",
+            Duration = 2,
+            Image = 4483362458,
+        })
         return
     end
     
     local thread = task.spawn(function()
-        local lastFire = time()
-        
-        while farmingThreads[buttonName] do
-            local currentTime = time()
-            
-            if currentTime - lastFire >= 0.1 then
-                RemoteEvent:FireServer({eventName})
-                lastFire = currentTime
-            end
-            
-            RunService.Heartbeat:Wait()
+        while true do
+            RemoteEvent:FireServer({eventName})
+            task.wait()
         end
     end)
     
     farmingThreads[buttonName] = thread
-    optimizedNotify("Фарм запущен", buttonName .. " активирован")
+    Rayfield:Notify({
+        Title = "Фарм запущен",
+        Content = buttonName .. " активирован",
+        Duration = 2,
+        Image = 4483362458,
+    })
 end
 
 -- Функция для запуска фарма JF and MS
@@ -361,29 +314,31 @@ local function startJFFarming(buttonName, eventNames)
     if farmingThreads[buttonName] then
         task.cancel(farmingThreads[buttonName])
         farmingThreads[buttonName] = nil
-        optimizedNotify("Фарм остановлен", buttonName .. " остановлен")
+        Rayfield:Notify({
+            Title = "Фарм остановлен",
+            Content = buttonName .. " остановлен",
+            Duration = 2,
+            Image = 4483362458,
+        })
         return
     end
     
     local thread = task.spawn(function()
-        local lastFire = time()
-        
-        while farmingThreads[buttonName] do
-            local currentTime = time()
-            
-            if currentTime - lastFire >= 0.1 then
-                for _, eventName in ipairs(eventNames) do
-                    RemoteEvent:FireServer({eventName})
-                end
-                lastFire = currentTime
+        while true do
+            for _, eventName in ipairs(eventNames) do
+                RemoteEvent:FireServer({eventName})
             end
-            
-            RunService.Heartbeat:Wait()
+            task.wait()
         end
     end)
     
     farmingThreads[buttonName] = thread
-    optimizedNotify("Фарм запущен", buttonName .. " активирован")
+    Rayfield:Notify({
+        Title = "Фарм запущен",
+        Content = buttonName .. " активирован",
+        Duration = 2,
+        Image = 4483362458,
+    })
 end
 
 -- Создаем вкладки
@@ -404,10 +359,20 @@ local ESPToggle = ESPTab:CreateToggle({
         espEnabled = state
         if state then
             startESP()
-            optimizedNotify("ESP", "ESP включен")
+            Rayfield:Notify({
+                Title = "ESP",
+                Content = "ESP включен",
+                Duration = 2,
+                Image = 4483362458,
+            })
         else
             stopESP()
-            optimizedNotify("ESP", "ESP выключен")
+            Rayfield:Notify({
+                Title = "ESP",
+                Content = "ESP выключен",
+                Duration = 2,
+                Image = 4483362458,
+            })
         end
     end,
 })
@@ -492,6 +457,8 @@ local StopButton = UtilitiesTab:CreateButton({
     Name = "Stop All Farming",
     Callback = function()
         stopAllFarming()
+        stopRespawnV2()
+        stopESP()
     end,
 })
 
@@ -499,7 +466,12 @@ local CleanupButton = UtilitiesTab:CreateButton({
     Name = "Cleanup Memory",
     Callback = function()
         cleanupMemory()
-        optimizedNotify("Очистка памяти", "Память успешно оптимизирована")
+        Rayfield:Notify({
+            Title = "Очистка памяти",
+            Content = "Память успешно оптимизирована",
+            Duration = 3,
+            Image = 4483362458,
+        })
     end,
 })
 
@@ -534,13 +506,23 @@ local RespawnToggle = RespawnTab:CreateToggle({
             if player.Character then
                 setupDeathTracking(player.Character)
             end
-            optimizedNotify("Auto Respawn", "Автореспавн включен")
+            Rayfield:Notify({
+                Title = "Auto Respawn",
+                Content = "Автореспавн включен",
+                Duration = 2,
+                Image = 4483362458,
+            })
         else
             if deathConnection then
                 deathConnection:Disconnect()
                 deathConnection = nil
             end
-            optimizedNotify("Auto Respawn", "Автореспавн выключен")
+            Rayfield:Notify({
+                Title = "Auto Respawn",
+                Content = "Автореспавн выключен",
+                Duration = 2,
+                Image = 4483362458,
+            })
         end
     end,
 })
@@ -549,7 +531,12 @@ local RespawnButton = RespawnTab:CreateButton({
     Name = "Respawn Now",
     Callback = function()
         respawnPlayer()
-        optimizedNotify("Респавн", "Респавн выполнен")
+        Rayfield:Notify({
+            Title = "Респавн",
+            Content = "Респавн выполнен",
+            Duration = 2,
+            Image = 4483362458,
+        })
     end,
 })
 
@@ -577,10 +564,20 @@ local RespawnV2Toggle = RespawnV2Tab:CreateToggle({
                 autoRespawnEnabled = false
             end
             startFastRespawn()
-            optimizedNotify("RespawnV2", "Респавн каждые 10 секунд включен")
+            Rayfield:Notify({
+                Title = "RespawnV2",
+                Content = "Респавн каждые 10 секунд включен",
+                Duration = 3,
+                Image = 4483362458,
+            })
         else
             stopRespawnV2()
-            optimizedNotify("RespawnV2", "Респавн каждые 10 секунд выключен")
+            Rayfield:Notify({
+                Title = "RespawnV2",
+                Content = "Респавн каждые 10 секунд выключен",
+                Duration = 3,
+                Image = 4483362458,
+            })
         end
     end,
 })
@@ -589,7 +586,12 @@ local RespawnV2Button = RespawnV2Tab:CreateButton({
     Name = "Respawn Now V2",
     Callback = function()
         respawnPlayer()
-        optimizedNotify("Респавн", "Респавн выполнен")
+        Rayfield:Notify({
+            Title = "Респавн",
+            Content = "Респавн выполнен",
+            Duration = 2,
+            Image = 4483362458,
+        })
     end,
 })
 
@@ -597,7 +599,12 @@ local ForceStopButton = RespawnV2Tab:CreateButton({
     Name = "Force Stop RespawnV2",
     Callback = function()
         stopRespawnV2()
-        optimizedNotify("RespawnV2", "Принудительно остановлен")
+        Rayfield:Notify({
+            Title = "RespawnV2",
+            Content = "Принудительно остановлен",
+            Duration = 3,
+            Image = 4483362458,
+        })
     end,
 })
 
@@ -610,6 +617,8 @@ end
 game:GetService("Players").PlayerRemoving:Connect(function(leavingPlayer)
     if leavingPlayer == player then
         stopAllFarming()
+        stopRespawnV2()
+        stopESP()
     end
 end)
 
@@ -631,5 +640,19 @@ for _, otherPlayer in ipairs(Players:GetPlayers()) do
     end
 end
 
-optimizedNotify("SPTS MODDED", "GUI успешно загружен!")
+-- Автоматическая очистка памяти каждые 30 минут
+task.spawn(function()
+    while true do
+        task.wait(1800) -- 30 минут
+        cleanupMemory()
+    end
+end)
+
+Rayfield:Notify({
+    Title = "SPTS MODDED",
+    Content = "GUI успешно загружен!",
+    Duration = 5,
+    Image = 4483362458,
+})
+
 Rayfield:LoadConfiguration()
